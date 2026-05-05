@@ -38,7 +38,16 @@ class WorkLogHandler {
             this._switchTab("tab-results");
         });
 
-        document.getElementById("exportBtn").addEventListener("click", () => {
+        document.getElementById("exportBoardBtn").addEventListener("click", () => {
+            if (this.projects) this._download(this._buildBoardCSV(this.projects), "cost_per_board.csv");
+        });
+        document.getElementById("exportCategoryBtn").addEventListener("click", () => {
+            if (this.projects) this._download(this._buildCategoryCSV(this.projects), "cost_by_category.csv");
+        });
+        document.getElementById("exportProjectBtn").addEventListener("click", () => {
+            if (this.projects) this._download(this._buildProjectCSV(this.projects), "cost_per_project.csv");
+        });
+        document.getElementById("exportAllBtn").addEventListener("click", () => {
             if (this.projects) this.exportToCSV(this.projects);
         });
 
@@ -181,7 +190,10 @@ class WorkLogHandler {
         tableEl.style.display = "block";
 
         document.getElementById("emptyState").style.display = "none";
-        document.getElementById("exportBtn").disabled = false;
+        ["exportBoardBtn", "exportCategoryBtn", "exportProjectBtn", "exportAllBtn"].forEach(id => {
+            document.getElementById(id).disabled = false;
+        });
+        document.getElementById("exportAllWrap").style.display = "flex";
 
         this._renderCategoryTable(projects);
         this._renderProjectTable(projects);
@@ -391,15 +403,18 @@ class WorkLogHandler {
         document.getElementById("projectSection").style.display = "block";
     }
 
-    exportToCSV(projects) {
-        const roles = this.roles;
-        const fmt = v => (+v).toFixed(4);
-        const q = v => `"${String(v).replace(/"/g, '""')}"`;
-        const row = arr => arr.map(q).join(",");
-        const blank = () => "";
-        const sections = [];
+    // ── CSV helpers ────────────────────────────────────────────────────
 
-        // ── Section 1: Cost per Board ──────────────────────────────────
+    _csvUtils() {
+        const fmt = v => (+v).toFixed(4);
+        const q   = v => `"${String(v).replace(/"/g, '""')}"`;
+        const row = arr => arr.map(q).join(",");
+        return { fmt, q, row };
+    }
+
+    _buildBoardCSV(projects) {
+        const roles = this.roles;
+        const { fmt, row } = this._csvUtils();
         const sortedKeys = Object.keys(projects).sort((a, b) => {
             const ag = /^\d+/.test(a), bg = /^\d+/.test(b);
             return ag === bg ? 0 : ag ? -1 : 1;
@@ -410,69 +425,71 @@ class WorkLogHandler {
             totals.Total += projects[k].Total;
             roles.forEach(r => (totals[r] += projects[k][r]));
         });
-
-        sections.push([
-            row(["=== Cost per Board ==="]),
+        return [
             row(["Board / Project", ...roles, "Total"]),
             ...sortedKeys.map(k => row([k, ...roles.map(r => fmt(projects[k][r])), fmt(projects[k].Total)])),
             row(["Grand Total", ...roles.map(r => fmt(totals[r])), fmt(totals.Total)]),
-        ]);
+        ].join("\n");
+    }
 
-        // ── Section 2: Cost by Category ────────────────────────────────
-        const csvCats = {};
-        const csvCatOrder = [];
+    _buildCategoryCSV(projects) {
+        const roles = this.roles;
+        const { fmt, row } = this._csvUtils();
+        const cats = {}, catOrder = [];
         for (let key in projects) {
             const cat = this._classifyBoard(key);
-            if (!csvCats[cat]) {
-                csvCats[cat] = { Total: 0 };
-                roles.forEach(r => (csvCats[cat][r] = 0));
-                csvCatOrder.push(cat);
-            }
-            csvCats[cat].Total += projects[key].Total;
-            roles.forEach(r => (csvCats[cat][r] += projects[key][r]));
+            if (!cats[cat]) { cats[cat] = { Total: 0 }; roles.forEach(r => (cats[cat][r] = 0)); catOrder.push(cat); }
+            cats[cat].Total += projects[key].Total;
+            roles.forEach(r => (cats[cat][r] += projects[key][r]));
         }
-        const gameIdx = csvCatOrder.indexOf("Game Projects");
-        if (gameIdx > 0) { csvCatOrder.splice(gameIdx, 1); csvCatOrder.unshift("Game Projects"); }
-        const catTotal = csvCatOrder.reduce((s, c) => s + csvCats[c].Total, 0);
-        const pct = v => catTotal > 0 ? ((v / catTotal) * 100).toFixed(2) + "%" : "0%";
-        const catRoleTotals = {};
-        roles.forEach(r => (catRoleTotals[r] = csvCatOrder.reduce((s, c) => s + csvCats[c][r], 0)));
-
-        sections.push([
-            row(["=== Cost by Category ==="]),
+        const gi = catOrder.indexOf("Game Projects");
+        if (gi > 0) { catOrder.splice(gi, 1); catOrder.unshift("Game Projects"); }
+        const total = catOrder.reduce((s, c) => s + cats[c].Total, 0);
+        const pct = v => total > 0 ? ((v / total) * 100).toFixed(2) + "%" : "0%";
+        const roleTotals = {};
+        roles.forEach(r => (roleTotals[r] = catOrder.reduce((s, c) => s + cats[c][r], 0)));
+        return [
             row(["Category", ...roles, "Total", "%"]),
-            ...csvCatOrder.map(c => row([c, ...roles.map(r => fmt(csvCats[c][r])), fmt(csvCats[c].Total), pct(csvCats[c].Total)])),
-            row(["Total", ...roles.map(r => fmt(catRoleTotals[r])), fmt(catTotal), "100%"]),
-        ]);
+            ...catOrder.map(c => row([c, ...roles.map(r => fmt(cats[c][r])), fmt(cats[c].Total), pct(cats[c].Total)])),
+            row(["Total", ...roles.map(r => fmt(roleTotals[r])), fmt(total), "100%"]),
+        ].join("\n");
+    }
 
-        // ── Section 3: Cost per Game Project ───────────────────────────
-        const gameKeys = Object.keys(projects).filter(k => /^\d+/.test(k));
-        if (gameKeys.length > 0) {
-            const avg = { Total: 0 };
-            roles.forEach(r => (avg[r] = 0));
-            gameKeys.forEach(k => { avg.Total += projects[k].Total; roles.forEach(r => (avg[r] += projects[k][r])); });
-            roles.forEach(r => (avg[r] /= gameKeys.length));
-            avg.Total /= gameKeys.length;
+    _buildProjectCSV(projects) {
+        const roles = this.roles;
+        const { fmt, row } = this._csvUtils();
+        const gameKeys = Object.keys(projects)
+            .filter(k => /^\d+/.test(k))
+            .sort((a, b) => projects[b].Total - projects[a].Total);
+        if (gameKeys.length === 0) return "";
+        const avg = { Total: 0 };
+        roles.forEach(r => (avg[r] = 0));
+        gameKeys.forEach(k => { avg.Total += projects[k].Total; roles.forEach(r => (avg[r] += projects[k][r])); });
+        roles.forEach(r => (avg[r] /= gameKeys.length));
+        avg.Total /= gameKeys.length;
+        return [
+            row(["Project", ...roles, "Total"]),
+            ...gameKeys.map(k => row([k, ...roles.map(r => fmt(projects[k][r])), fmt(projects[k].Total)])),
+            row(["Average", ...roles.map(r => fmt(avg[r])), fmt(avg.Total)]),
+        ].join("\n");
+    }
 
-            sections.push([
-                row(["=== Cost per Game Project ==="]),
-                row(["Role", ...gameKeys, "Average"]),
-                ...[...roles, "Total"].map(role =>
-                    row([role, ...gameKeys.map(k => fmt(projects[k][role])), fmt(avg[role])])
-                ),
-            ]);
-        }
-
-        const csv = sections.map(s => s.join("\n")).join("\n" + blank() + "\n");
-        const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    _download(csvContent, filename) {
+        const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
-        a.href = url;
-        a.download = "cost_report.csv";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a); URL.revokeObjectURL(url);
+    }
+
+    exportToCSV(projects) {
+        const sections = [
+            "=== Cost per Board ===\n"    + this._buildBoardCSV(projects),
+            "=== Cost by Category ===\n"  + this._buildCategoryCSV(projects),
+            "=== Cost per Game Project ===\n" + this._buildProjectCSV(projects),
+        ];
+        this._download(sections.join("\n\n"), "cost_report_all.csv");
     }
 }
 
