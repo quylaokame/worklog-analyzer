@@ -30,6 +30,13 @@ class XlsxHandler {
         document.getElementById("exportProjectsBtn").addEventListener("click", () => {
             this._exportProjectsCSV();
         });
+
+        // If .jab was loaded after XLSX, trigger cost computation
+        document.addEventListener('userInfosReady', () => {
+            if (this.flatGroupable) {
+                workLogHandler.loadFromXlsx(this.flatGroupable);
+            }
+        });
     }
 
     async _loadXlsx(file) {
@@ -50,7 +57,13 @@ class XlsxHandler {
         const count = this.flatGroupable?.length ?? 0;
         this._setStatus("xlsx", `${count} records loaded`);
         this._renderProjectTable();
-        this._switchTab("tab-projects");
+
+        // Trigger Cost Report if userInfos already loaded
+        if (this.flatGroupable && workLogHandler.userInfos) {
+            workLogHandler.loadFromXlsx(this.flatGroupable);
+        } else {
+            this._switchTab("tab-projects");
+        }
     }
 
     // ── Data helpers ───────────────────────────────────────────────────

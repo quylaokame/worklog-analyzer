@@ -1,4 +1,4 @@
-import { loadCSV, loadJSON } from "./loader.js";
+import { loadJSON } from "./loader.js";
 
 class WorkLogHandler {
 
@@ -20,23 +20,11 @@ class WorkLogHandler {
             this._setStatus("userGroup", `${Object.keys(this.userInfos).length} users loaded`);
             const studio = document.getElementById("studioInput").value.trim();
             if (studio) document.getElementById("studioName").textContent = studio;
+            // Notify XlsxHandler in case XLSX was already loaded
+            document.dispatchEvent(new Event('userInfosReady'));
         });
 
-        document.getElementById("csvFile").addEventListener("change", async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            document.getElementById("csvFileName").textContent = file.name;
-            if (!this.userInfos) {
-                alert("Please load the User Group file first.");
-                return;
-            }
-            const data = await loadCSV(file);
-            if (!data) return;
-            this.projects = this.getWorklogInfo(data);
-            this._setStatus("worklog", `${Object.keys(this.projects).length} boards processed`);
-            this._renderResults(this.projects);
-            this._switchTab("tab-results");
-        });
+        // CSV listener removed — Cost Report is now computed from XLSX data
 
         document.getElementById("exportBoardBtn").addEventListener("click", () => {
             if (this.projects) this._download(this._buildBoardCSV(this.projects), "cost_per_board.csv");
@@ -86,6 +74,41 @@ class WorkLogHandler {
         });
         this.roles = [...rolesSet];
         return users;
+    }
+
+    // ── XLSX-based Cost Report ─────────────────────────────────────────
+
+    /**
+     * Build the same `projects` map as getWorklogInfo() but directly from
+     * XLSX "Flat (Groupable)" rows: { 'Project Name', 'Log user', 'Hr. Spent' }
+     */
+    getWorklogInfoFromXlsx(rows) {
+        const projects = {};
+        rows.forEach(r => {
+            const boardName = r['Project Name'];
+            if (!boardName) return;
+            if (!projects[boardName]) {
+                const entry = { Total: 0 };
+                this.roles.forEach(role => (entry[role] = 0));
+                projects[boardName] = entry;
+            }
+            const user = this.userInfos[r['Log user']];
+            if (!user) return;
+            const hours = +r['Hr. Spent'] || 0;
+            const manday = hours * user.cost;
+            projects[boardName][user.role] = (projects[boardName][user.role] || 0) + manday;
+            projects[boardName].Total += manday;
+        });
+        return projects;
+    }
+
+    /** Called by XlsxHandler after XLSX is parsed (and userInfos is ready). */
+    loadFromXlsx(rows) {
+        if (!this.userInfos) return;
+        this.projects = this.getWorklogInfoFromXlsx(rows);
+        this._setStatus("xlsx", `${Object.keys(this.projects).length} boards · cost computed`);
+        this._renderResults(this.projects);
+        this._switchTab("tab-results");
     }
 
     getWorklogInfo(records) {
