@@ -211,6 +211,128 @@ class XlsxHandler {
         document.getElementById("projectAnalysisSection").style.display = "block";
         document.getElementById("projectEmptyState").style.display = "none";
         document.getElementById("exportProjectsBtn").disabled = false;
+
+        this._renderProjectProfiles();
+    }
+
+    // ── Phase profiles (per-project breakdown) ─────────────────────────
+
+    /**
+     * Count weekdays (Mon–Fri) between start and end that have no log entry.
+     * logDaySet: Set of date strings (d.toDateString())
+     */
+    _countBreakDays(start, end, logDaySet) {
+        let breaks = 0;
+        const cur = new Date(start);
+        cur.setHours(0, 0, 0, 0);
+        const endD = new Date(end);
+        endD.setHours(0, 0, 0, 0);
+        while (cur <= endD) {
+            const dow = cur.getDay();
+            if (dow !== 0 && dow !== 6 && !logDaySet.has(cur.toDateString())) {
+                breaks++;
+            }
+            cur.setDate(cur.getDate() + 1);
+        }
+        return breaks;
+    }
+
+    /** Compute per-sprint stats for one project. */
+    _computePhases(project) {
+        const rows = this.flatGroupable.filter(r => r['Project Name'] === project);
+        const phases = {};
+
+        rows.forEach(r => {
+            const sprint = r['Sprint'] || '(No Sprint)';
+            const raw = r['Log Date & Time'];
+            if (!raw) return;
+            const d = raw instanceof Date ? raw : new Date(raw);
+            if (isNaN(d)) return;
+
+            if (!phases[sprint]) {
+                phases[sprint] = { min: d, max: d, users: new Set(), hours: 0, manday: 0, logDays: new Set() };
+            } else {
+                if (d < phases[sprint].min) phases[sprint].min = d;
+                if (d > phases[sprint].max) phases[sprint].max = d;
+            }
+
+            phases[sprint].logDays.add(d.toDateString());
+            phases[sprint].users.add(r['Log user']);
+            const h = +r['Hr. Spent'] || 0;
+            phases[sprint].hours += h;
+            const userInfo = workLogHandler.userInfos?.[r['Log user']];
+            if (userInfo) phases[sprint].manday += h * userInfo.cost;
+        });
+
+        return this._sortSprints(Object.keys(phases)).map(s => {
+            const p = phases[s];
+            // Count distinct weekdays that have at least 1 log
+            const loggedDays = [...p.logDays].filter(ds => {
+                const dow = new Date(ds).getDay();
+                return dow !== 0 && dow !== 6;
+            }).length;
+            return {
+                name: s,
+                min: p.min,
+                max: p.max,
+                people: p.users.size,
+                hours: p.hours,
+                manday: p.manday,
+                loggedDays,
+                breakDays: this._countBreakDays(p.min, p.max, p.logDays),
+            };
+        });
+    }
+
+    _renderProjectProfiles() {
+        if (!this._projectsData) return;
+        const hasCost = !!workLogHandler.userInfos;
+
+        let html = '';
+        this._projectsData.forEach(({ project }) => {
+            const phases = this._computePhases(project);
+            if (phases.length === 0) return;
+
+            const phaseRows = phases.map(p => {
+                const breakClass = p.breakDays >= 10 ? 'break-high' : p.breakDays >= 5 ? 'break-mid' : '';
+                return `<tr>
+                    <td class="phase-name-cell">${this._fmtSprint(p.name)}</td>
+                    <td class="center-cell">${fmtDate(p.min)}</td>
+                    <td class="center-cell">${fmtDate(p.max)}</td>
+                    <td class="center-cell">${p.people}</td>
+                    <td class="right-cell">${p.hours.toFixed(1)} h</td>
+                    ${hasCost ? `<td class="right-cell">${p.manday.toFixed(2)}</td>` : ''}
+                    <td class="center-cell">${p.loggedDays}</td>
+                    <td class="center-cell ${breakClass}">${p.breakDays}</td>
+                </tr>`;
+            }).join('');
+
+            html += `
+            <div class="profile-card">
+                <div class="profile-header">${project}</div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="text-align:left">Phase</th>
+                                <th>Start</th>
+                                <th>End</th>
+                                <th>People</th>
+                                <th>Hours</th>
+                                ${hasCost ? '<th>Mandays</th>' : ''}
+                                <th title="Distinct weekdays with at least 1 log entry">Log Days</th>
+                                <th title="Weekdays without any log between start–end">Break Days</th>
+                            </tr>
+                        </thead>
+                        <tbody>${phaseRows}</tbody>
+                    </table>
+                </div>
+            </div>`;
+        });
+
+        const container = document.getElementById("projectProfiles");
+        container.innerHTML = html;
+        document.getElementById("projectProfilesSection").style.display = "block";
     }
 
     _exportProjectsCSV() {

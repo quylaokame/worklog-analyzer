@@ -336,6 +336,27 @@
         /* Average column highlight */
         .avg-col { background: #f5f3ff !important; color: #4f46e5 !important; font-weight: 700; }
         .avg-header { background: #ede9fe !important; color: #4f46e5 !important; }
+
+        /* Project phase profiles */
+        .profile-card {
+            background: #fff;
+            border-radius: 12px;
+            border: 1px solid #e5e7eb;
+            margin-bottom: 20px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .profile-header {
+            background: #1a1a2e;
+            color: #fff;
+            padding: 11px 20px;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+        .phase-name-cell { font-weight: 500; color: #374151; }
+        .break-mid { color: #f59e0b !important; font-weight: 700; }
+        .break-high { color: #ef4444 !important; font-weight: 700; }
     </style>
 </head>
 <body>
@@ -481,6 +502,11 @@
                     <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
                 </svg>
                 <p>Load the <strong>Worklog Report XLSX</strong> file in the <strong>Load Data</strong> tab.</p>
+            </div>
+
+            <div id="projectProfilesSection" style="display:none">
+                <div class="section-title" style="margin-top:36px">Project Phase Profiles</div>
+                <div id="projectProfiles"></div>
             </div>
         </div>
     </div>
