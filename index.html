@@ -337,6 +337,126 @@
         .avg-col { background: #f5f3ff !important; color: #4f46e5 !important; font-weight: 700; }
         .avg-header { background: #ede9fe !important; color: #4f46e5 !important; }
 
+        /* Firebase card */
+        .firebase-card {
+            margin-top: 20px;
+            background: #fff;
+            border-radius: 12px;
+            border: 1px solid #c4b5fd;
+            padding: 20px 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .firebase-card h3 { font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 3px; }
+        .firebase-card p  { font-size: 12px; color: #9ca3af; margin-bottom: 14px; }
+        .firebase-row {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+        .firebase-load-row {
+            display: none;
+            gap: 10px;
+            align-items: center;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+        .firebase-load-row select {
+            padding: 7px 10px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 13px;
+            min-width: 160px;
+        }
+        .status-badge.error .dot { background: #ef4444; }
+        .status-badge.error { color: #ef4444; }
+
+        /* User Wise tab */
+        .user-wise-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        .user-select-wrap { display: flex; align-items: center; gap: 10px; }
+        .user-select-wrap label { font-size: 13px; font-weight: 600; color: #374151; }
+        .user-select-wrap select {
+            padding: 8px 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #1a1a2e;
+            background: #fff;
+            min-width: 220px;
+        }
+        .summary-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+        .summary-chip {
+            background: #ede9fe;
+            color: #4f46e5;
+            border-radius: 20px;
+            padding: 4px 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        /* Period card */
+        .period-card {
+            display: flex;
+            gap: 0;
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .period-item {
+            flex: 1;
+            padding: 14px 18px;
+            border-right: 1px solid #f3f4f6;
+        }
+        .period-item:last-child { border-right: none; }
+        .period-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #9ca3af; margin-bottom: 4px; }
+        .period-value { font-size: 15px; font-weight: 600; color: #1a1a2e; }
+        .period-value.accent { color: #4f46e5; }
+
+        /* Board summary row */
+        .board-summary-row td {
+            background: #f8f9fa;
+            border-top: 2px solid #e5e7eb;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 10px 16px;
+        }
+        .board-count {
+            margin-left: 8px;
+            font-size: 11px;
+            color: #9ca3af;
+            font-weight: 400;
+        }
+
+        /* Task detail rows */
+        .task-detail-row td { padding: 8px 16px; }
+        .task-detail-row:hover td { background: #fafafa; }
+
+        .task-name-cell {
+            max-width: 240px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 13px;
+            color: #1a1a2e;
+        }
+        .subtask-name-cell {
+            max-width: 220px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 12px;
+            color: #6b7280;
+        }
+        .sprint-cell { font-size: 11px; color: #6b7280; white-space: nowrap; }
+
         /* Project phase profiles */
         .profile-card {
             background: #fff;
@@ -363,6 +483,7 @@
     <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/dexie@3/dist/dexie.min.js"></script>
 
     <header>
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -379,14 +500,18 @@
             <button class="tab-btn active" data-tab="tab-load">Load Data</button>
             <button class="tab-btn" data-tab="tab-results">Cost Report</button>
             <button class="tab-btn" data-tab="tab-projects">Project Analysis</button>
+            <button class="tab-btn" data-tab="tab-userwise">User Wise</button>
         </div>
 
         <!-- Load Data Tab -->
         <div id="tab-load" class="tab-content active">
-            <div class="settings-row" style="grid-template-columns: 1fr 1fr; max-width: 50%;">
+            <div class="settings-row" style="grid-template-columns: 1fr 1fr; max-width: 50%; margin-bottom: 20px;">
                 <div class="field-group">
-                    <label class="field-label" for="studioInput">Studio Name</label>
-                    <input type="text" id="studioInput" class="text-input" placeholder="e.g. Kame Studio" />
+                    <label class="field-label" for="studioSelect">Studio</label>
+                    <select id="studioSelect" class="text-input">
+                        <option value="">— Select Studio —</option>
+                        <!-- options populated by FirebaseHandler -->
+                    </select>
                 </div>
             </div>
             <div class="load-grid" style="grid-template-columns: repeat(2, 1fr);">
@@ -422,6 +547,45 @@
                         <span class="dot"></span>
                         <span id="status-xlsx-text">Not loaded</span>
                     </div>
+                </div>
+            </div>
+            <!-- Local History (IndexedDB) -->
+            <div class="firebase-card" style="border-color:#a7f3d0; margin-bottom:12px;">
+                <h3>💾 Local History <span style="font-size:11px;font-weight:400;color:#9ca3af;">(auto-saved · IndexedDB)</span></h3>
+                <p>Report được tự động lưu mỗi lần load XLSX. Chọn ngày để khôi phục không cần upload lại.</p>
+                <div class="firebase-load-row" id="localHistorySection" style="display:none">
+                    <span style="font-size:12px;color:#6b7280;font-weight:600;">Restore:</span>
+                    <select id="localDateSelect"></select>
+                    <button class="btn btn-primary btn-sm" id="localLoadBtn">⬇ Load</button>
+                    <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;padding:5px 10px;" id="localDeleteBtn" title="Delete this entry">🗑</button>
+                </div>
+                <div class="status-badge" id="status-localdb">
+                    <span class="dot"></span>
+                    <span id="status-localdb-text">No local history yet</span>
+                </div>
+            </div>
+
+            <!-- Firebase section -->
+            <div class="firebase-card">
+                <h3>🔥 Firebase (optional)</h3>
+                <p>Lưu và tải lại report từ Firebase Realtime Database — mỗi studio lưu ở path riêng.</p>
+                <div class="firebase-row">
+                    <div class="field-group" style="flex:1; min-width:260px;">
+                        <label class="field-label" for="firebaseUrl">Realtime Database URL</label>
+                        <input type="text" id="firebaseUrl" class="text-input"
+                            placeholder="https://your-project-default-rtdb.firebaseio.com" />
+                    </div>
+                    <button class="btn btn-primary btn-sm" id="firebaseConnectBtn">Connect</button>
+                    <button class="btn btn-success btn-sm" id="firebaseSaveBtn">💾 Save to Firebase</button>
+                </div>
+                <div class="firebase-load-row" id="firebaseLoadSection">
+                    <span style="font-size:12px;color:#6b7280;font-weight:600;">Load report:</span>
+                    <select id="firebaseDateSelect"></select>
+                    <button class="btn btn-primary btn-sm" id="firebaseLoadBtn">⬇ Load</button>
+                </div>
+                <div class="status-badge" id="status-firebase">
+                    <span class="dot"></span>
+                    <span id="status-firebase-text">Not connected</span>
                 </div>
             </div>
         </div>
@@ -507,6 +671,33 @@
             <div id="projectProfilesSection" style="display:none">
                 <div class="section-title" style="margin-top:36px">Project Phase Profiles</div>
                 <div id="projectProfiles"></div>
+            </div>
+        </div>
+    </div>
+
+        <!-- User Wise Tab -->
+        <div id="tab-userwise" class="tab-content" style="max-width:1200px;margin:0 auto;padding:0 32px 32px">
+            <div class="user-wise-toolbar">
+                <div class="user-select-wrap">
+                    <label for="userSelect">User</label>
+                    <select id="userSelect">
+                        <option value="">— Select User —</option>
+                    </select>
+                </div>
+                <div class="summary-chips" id="userWiseSummary"></div>
+            </div>
+
+            <div id="userWisePeriod"></div>
+
+            <div id="userWiseEmptyState" class="empty-state">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+                </svg>
+                <p>Load <strong>Worklog Report XLSX</strong> then select a user to see their task history.</p>
+            </div>
+
+            <div id="userWiseContent" style="display:none">
+                <div id="userWiseTableWrap" class="table-wrap table-scroll"></div>
             </div>
         </div>
     </div>

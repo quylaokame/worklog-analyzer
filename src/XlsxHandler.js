@@ -145,18 +145,20 @@ class XlsxHandler {
     // ── Render ─────────────────────────────────────────────────────────
 
     _renderProjectTable() {
-        if (!this.flatGroupable) return;
+        if (!this.flatGroupable && !this._projectsData) return;
 
-        this._projectsData = this._gameProjects().map(p => this._computeProject(p));
-        this._projectsData.sort((a, b) => b.totalHours - a.totalHours);
+        if (this.flatGroupable) {
+            this._projectsData = this._gameProjects().map(p => this._computeProject(p));
+            this._projectsData.sort((a, b) => b.totalHours - a.totalHours);
+            // Collect all sprints across all game projects, sorted
+            const allSprintsSet = new Set();
+            this._projectsData.forEach(p => Object.keys(p.sprintDates).forEach(s => allSprintsSet.add(s)));
+            this._allSprints = this._sortSprints([...allSprintsSet]);
+        }
+
         const projects = this._projectsData;
-
-        // Collect all sprints across all game projects, sorted
-        const allSprintsSet = new Set();
-        projects.forEach(p => Object.keys(p.sprintDates).forEach(s => allSprintsSet.add(s)));
-        this._allSprints = this._sortSprints([...allSprintsSet]);
-
-        const hasCost = !!workLogHandler.userInfos;
+        const hasCost = !!workLogHandler.userInfos ||
+            projects.some(p => p.totalManday > 0);
 
         // ── thead: 2 rows ──────────────────────────────────────────────
         const fixedCols = `
@@ -212,7 +214,8 @@ class XlsxHandler {
         document.getElementById("projectEmptyState").style.display = "none";
         document.getElementById("exportProjectsBtn").disabled = false;
 
-        this._renderProjectProfiles();
+        // Only auto-render profiles here when called from live XLSX load (not restore)
+        if (!this._restoringFromFirebase) this._renderProjectProfiles();
     }
 
     // ── Phase profiles (per-project breakdown) ─────────────────────────
@@ -284,13 +287,15 @@ class XlsxHandler {
         });
     }
 
-    _renderProjectProfiles() {
+    _renderProjectProfiles(precomputedPhases = null) {
         if (!this._projectsData) return;
-        const hasCost = !!workLogHandler.userInfos;
+        const hasCost = !!workLogHandler.userInfos ||
+            this._projectsData.some(p => (precomputedPhases?.[p.project] || []).some(ph => ph.manday > 0));
 
         let html = '';
         this._projectsData.forEach(({ project }) => {
-            const phases = this._computePhases(project);
+            const phases = precomputedPhases?.[project] ??
+                (this.flatGroupable ? this._computePhases(project) : []);
             if (phases.length === 0) return;
 
             const phaseRows = phases.map(p => {
@@ -333,6 +338,9 @@ class XlsxHandler {
         const container = document.getElementById("projectProfiles");
         container.innerHTML = html;
         document.getElementById("projectProfilesSection").style.display = "block";
+
+        // Signal that project data is ready (LocalDbHandler listens to auto-save)
+        document.dispatchEvent(new Event('reportReady'));
     }
 
     _exportProjectsCSV() {
@@ -365,6 +373,22 @@ class XlsxHandler {
         a.href = url; a.download = 'game_projects_overview.csv';
         document.body.appendChild(a); a.click();
         document.body.removeChild(a); URL.revokeObjectURL(url);
+    }
+
+    /** Restore project analysis from Firebase-saved payload (no XLSX needed). */
+    restoreFromData(overview, allSprints, phases) {
+        this._projectsData = overview;
+        this._allSprints   = allSprints?.length
+            ? allSprints
+            : this._sortSprints([...new Set(overview.flatMap(p => Object.keys(p.sprintDates)))]);
+        this._restoringFromFirebase = true;
+        this._renderProjectTable();
+        this._restoringFromFirebase = false;
+        this._renderProjectProfiles(phases);
+        document.getElementById("projectAnalysisSection").style.display = "block";
+        document.getElementById("projectEmptyState").style.display      = "none";
+        document.getElementById("exportProjectsBtn").disabled = false;
+        this._switchTab("tab-projects");
     }
 
     // ── Utils ──────────────────────────────────────────────────────────

@@ -18,8 +18,7 @@ class WorkLogHandler {
             if (!data) return;
             this.userInfos = this.getUsersInfo(data);
             this._setStatus("userGroup", `${Object.keys(this.userInfos).length} users loaded`);
-            const studio = document.getElementById("studioInput").value.trim();
-            if (studio) document.getElementById("studioName").textContent = studio;
+            // Header is managed by FirebaseHandler (studio select)
             // Notify XlsxHandler in case XLSX was already loaded
             document.dispatchEvent(new Event('userInfosReady'));
         });
@@ -58,6 +57,13 @@ class WorkLogHandler {
         const text = document.getElementById(`status-${type}-text`);
         badge.classList.add("loaded");
         text.textContent = message;
+    }
+
+    /** Restore state from a Firebase-saved payload (no XLSX / .jab needed). */
+    restoreFromData(projects, roles) {
+        this.projects = projects;
+        this.roles    = roles;
+        this._renderResults(projects);
     }
 
     getUsersInfo(data) {
@@ -109,6 +115,8 @@ class WorkLogHandler {
         this._setStatus("xlsx", `${Object.keys(this.projects).length} boards · cost computed`);
         this._renderResults(this.projects);
         this._switchTab("tab-results");
+        // Signal that cost data is now included — LocalDbHandler will re-save with manday
+        document.dispatchEvent(new Event('reportReady'));
     }
 
     getWorklogInfo(records) {
