@@ -86,16 +86,23 @@ function weekdayCount(logDaySet) {
 class UserWiseHandler {
 
     constructor() {
+        // When a report is restored from Firebase/IndexedDB (no XLSX in memory),
+        // per-user tasks are rehydrated here keyed by user name.
+        this._restored = null;
         this._initEvents();
     }
 
     _initEvents() {
         document.getElementById('userSelect').addEventListener('change', () => this._renderTable());
+        document.getElementById('exportUserWiseBtn')
+            .addEventListener('click', () => this._exportCSV());
         document.addEventListener('reportReady', () => this._onDataReady());
     }
 
     _onDataReady() {
+        // Live XLSX data takes precedence over any restored snapshot.
         if (!xlsxHandler.flatGroupable) return;
+        this._restored = null;
         this._populateUsers();
     }
 
@@ -103,7 +110,11 @@ class UserWiseHandler {
 
     _populateUsers() {
         const users = new Set();
-        xlsxHandler.flatGroupable.forEach(r => { const u = col.user(r); if (u) users.add(u); });
+        if (this._restored) {
+            Object.keys(this._restored).forEach(u => users.add(u));
+        } else if (xlsxHandler.flatGroupable) {
+            xlsxHandler.flatGroupable.forEach(r => { const u = col.user(r); if (u) users.add(u); });
+        }
 
         const sel  = document.getElementById('userSelect');
         const prev = sel.value;
@@ -136,6 +147,9 @@ class UserWiseHandler {
     }
 
     _getTasksForUser(user) {
+        // Restored snapshot: tasks were pre-computed and serialized.
+        if (this._restored) return this._restored[user] || [];
+
         const summaryMap = this._buildSummaryMap();
         const userCost   = workLogHandler.userInfos?.[user]?.cost ?? 0;
         const rows       = xlsxHandler.flatGroupable.filter(r => col.user(r) === user);
@@ -196,14 +210,18 @@ class UserWiseHandler {
 
     _renderTable() {
         const user = document.getElementById('userSelect').value;
+        const hasData = this._restored || xlsxHandler.flatGroupable;
 
-        if (!user || !xlsxHandler.flatGroupable) {
+        if (!user || !hasData) {
             document.getElementById('userWiseEmptyState').style.display = 'block';
             document.getElementById('userWiseContent').style.display    = 'none';
+            document.getElementById('exportUserWiseBtn').disabled        = true;
             return;
         }
 
         const tasks   = this._getTasksForUser(user);
+        this._currentUser  = user;
+        this._currentTasks = tasks;
         const hasCost = !!workLogHandler.userInfos;
 
         // ── Global stats ───────────────────────────────────────────────────
@@ -334,6 +352,88 @@ class UserWiseHandler {
         document.getElementById('userWiseTableWrap').innerHTML = html;
         document.getElementById('userWiseContent').style.display    = 'block';
         document.getElementById('userWiseEmptyState').style.display = 'none';
+        document.getElementById('exportUserWiseBtn').disabled        = tasks.length === 0;
+    }
+
+    // ── Persistence ──────────────────────────────────────────────────────────
+
+    /**
+     * Serialize all per-user tasks so the User Wise tab can be restored without
+     * the source XLSX in memory. Sets → arrays, Dates → ISO strings.
+     * Returns null when there is no live data to snapshot.
+     */
+    buildPayload() {
+        if (!xlsxHandler.flatGroupable) return null;
+
+        const users = new Set();
+        xlsxHandler.flatGroupable.forEach(r => { const u = col.user(r); if (u) users.add(u); });
+
+        const tasksByUser = {};
+        users.forEach(u => {
+            tasksByUser[u] = this._getTasksForUser(u).map(t => ({
+                ...t,
+                logDays: [...t.logDays],
+                min: t.min?.toISOString?.() ?? null,
+                max: t.max?.toISOString?.() ?? null,
+            }));
+        });
+
+        return { tasksByUser };
+    }
+
+    /** Rehydrate from a saved payload (built by buildPayload). */
+    restoreFromData(payload) {
+        if (!payload?.tasksByUser) return;
+
+        this._restored = {};
+        Object.entries(payload.tasksByUser).forEach(([u, tasks]) => {
+            this._restored[u] = tasks.map(t => ({
+                ...t,
+                logDays: new Set(t.logDays || []),
+                min: t.min ? new Date(t.min) : null,
+                max: t.max ? new Date(t.max) : null,
+            }));
+        });
+
+        this._populateUsers();
+    }
+
+    // ── Export ─────────────────────────────────────────────────────────────
+
+    _exportCSV() {
+        const tasks = this._currentTasks;
+        const user  = this._currentUser;
+        if (!user || !tasks?.length) return;
+
+        const hasCost = tasks.some(t => t.manday > 0);
+        const q = v => `"${String(v).replace(/"/g, '""')}"`;
+
+        const headers = [
+            'Project / Board', 'Sprint', 'Task ID', 'Task', 'Sub Task ID', 'Sub Task',
+            'Hours', 'Log Days', 'Total Days',
+        ];
+        if (hasCost) headers.push('Mandays');
+        headers.push('Start Log', 'End Log', 'Break Days');
+
+        const lines = tasks.map(t => {
+            const cols = [
+                t.project, t.sprint ? xlsxHandler._fmtSprint(t.sprint) : '',
+                t.taskId, t.taskName, t.subTaskId, t.subTaskName,
+                t.hours.toFixed(2), t.loggedDays, t.totalDays,
+            ];
+            if (hasCost) cols.push(t.manday.toFixed(4));
+            cols.push(fmtDate(t.min), fmtDate(t.max), t.breakDays);
+            return cols.map(q).join(',');
+        });
+
+        const csv  = [headers.map(q).join(','), ...lines].join('\n');
+        const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        const safe = user.replace(/[^\w.-]+/g, '_');
+        a.href = url; a.download = `userwise_${safe}.csv`;
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a); URL.revokeObjectURL(url);
     }
 }
 

@@ -31,6 +31,10 @@ class XlsxHandler {
             this._exportProjectsCSV();
         });
 
+        document.getElementById("exportProfilesBtn").addEventListener("click", () => {
+            this._exportProfilesCSV();
+        });
+
         // If .jab was loaded after XLSX, trigger cost computation
         document.addEventListener('userInfosReady', () => {
             if (this.flatGroupable) {
@@ -292,11 +296,16 @@ class XlsxHandler {
         const hasCost = !!workLogHandler.userInfos ||
             this._projectsData.some(p => (precomputedPhases?.[p.project] || []).some(ph => ph.manday > 0));
 
+        // Keep the phases used for rendering so the Export button can reuse them
+        // (works for both live XLSX and restored payloads).
+        this._phasesData = {};
+
         let html = '';
         this._projectsData.forEach(({ project }) => {
             const phases = precomputedPhases?.[project] ??
                 (this.flatGroupable ? this._computePhases(project) : []);
             if (phases.length === 0) return;
+            this._phasesData[project] = phases;
 
             const phaseRows = phases.map(p => {
                 const breakClass = p.breakDays >= 10 ? 'break-high' : p.breakDays >= 5 ? 'break-mid' : '';
@@ -338,6 +347,8 @@ class XlsxHandler {
         const container = document.getElementById("projectProfiles");
         container.innerHTML = html;
         document.getElementById("projectProfilesSection").style.display = "block";
+        document.getElementById("exportProfilesBtn").disabled =
+            Object.keys(this._phasesData).length === 0;
 
         // Signal that project data is ready (LocalDbHandler listens to auto-save)
         document.dispatchEvent(new Event('reportReady'));
@@ -371,6 +382,38 @@ class XlsxHandler {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url; a.download = 'game_projects_overview.csv';
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a); URL.revokeObjectURL(url);
+    }
+
+    _exportProfilesCSV() {
+        if (!this._phasesData || Object.keys(this._phasesData).length === 0) return;
+        const hasCost = Object.values(this._phasesData)
+            .some(arr => arr.some(p => p.manday > 0));
+        const q = v => `"${String(v).replace(/"/g, '""')}"`;
+
+        const headers = ['Project', 'Phase', 'Start', 'End', 'People', 'Hours'];
+        if (hasCost) headers.push('Mandays');
+        headers.push('Log Days', 'Break Days');
+
+        const rows = [];
+        Object.entries(this._phasesData).forEach(([project, phases]) => {
+            phases.forEach(p => {
+                const cols = [
+                    project, this._fmtSprint(p.name), fmtDate(p.min), fmtDate(p.max),
+                    p.people, p.hours.toFixed(2),
+                ];
+                if (hasCost) cols.push(p.manday.toFixed(4));
+                cols.push(p.loggedDays, p.breakDays);
+                rows.push(cols.map(q).join(','));
+            });
+        });
+
+        const csv  = [headers.map(q).join(','), ...rows].join('\n');
+        const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href = url; a.download = 'project_phase_profiles.csv';
         document.body.appendChild(a); a.click();
         document.body.removeChild(a); URL.revokeObjectURL(url);
     }

@@ -4,6 +4,7 @@
  */
 import workLogHandler from './WorkLogHandler.js';
 import xlsxHandler    from './XlsxHandler.js';
+import userWiseHandler from './UserWiseHandler.js';
 
 // ── Serialize ────────────────────────────────────────────────────────────────
 
@@ -39,6 +40,7 @@ export function buildPayload(studio) {
         phases,
         costReport: workLogHandler.projects || null,
         roles:      workLogHandler.roles    || [],
+        userWise:   userWiseHandler.buildPayload(),
     };
 }
 
@@ -69,5 +71,9 @@ export function restoreFromPayload(payload) {
 
     if (payload.costReport && payload.roles?.length) {
         workLogHandler.restoreFromData(payload.costReport, payload.roles);
+    }
+
+    if (payload.userWise) {
+        userWiseHandler.restoreFromData(payload.userWise);
     }
 }
