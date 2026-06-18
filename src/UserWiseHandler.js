@@ -368,26 +368,34 @@ class UserWiseHandler {
         const users = new Set();
         xlsxHandler.flatGroupable.forEach(r => { const u = col.user(r); if (u) users.add(u); });
 
-        const tasksByUser = {};
-        users.forEach(u => {
-            tasksByUser[u] = this._getTasksForUser(u).map(t => ({
+        // Stored as an ARRAY (not a username-keyed object): Firebase Realtime DB
+        // forbids '.', '#', '$', '/', '[', ']' in keys, and usernames contain dots.
+        const users_ = [...users].map(name => ({
+            name,
+            tasks: this._getTasksForUser(name).map(t => ({
                 ...t,
                 logDays: [...t.logDays],
                 min: t.min?.toISOString?.() ?? null,
                 max: t.max?.toISOString?.() ?? null,
-            }));
-        });
+            })),
+        }));
 
-        return { tasksByUser };
+        return { users: users_ };
     }
 
     /** Rehydrate from a saved payload (built by buildPayload). */
     restoreFromData(payload) {
-        if (!payload?.tasksByUser) return;
+        // Support both the current array form and the legacy object form.
+        const entries = payload?.users
+            ? payload.users.map(u => [u.name, u.tasks])
+            : payload?.tasksByUser
+                ? Object.entries(payload.tasksByUser)
+                : null;
+        if (!entries) return;
 
         this._restored = {};
-        Object.entries(payload.tasksByUser).forEach(([u, tasks]) => {
-            this._restored[u] = tasks.map(t => ({
+        entries.forEach(([name, tasks]) => {
+            this._restored[name] = (tasks || []).map(t => ({
                 ...t,
                 logDays: new Set(t.logDays || []),
                 min: t.min ? new Date(t.min) : null,
