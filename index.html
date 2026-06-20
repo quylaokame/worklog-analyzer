@@ -477,6 +477,59 @@
         .phase-name-cell { font-weight: 500; color: #374151; }
         .break-mid { color: #f59e0b !important; font-weight: 700; }
         .break-high { color: #ef4444 !important; font-weight: 700; }
+
+        /* Team tabs */
+        .member-card {
+            background: #fff;
+            border-radius: 12px;
+            border: 1px solid #e5e7eb;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        .member-head {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            padding: 12px 20px;
+            background: #1a1a2e;
+            color: #fff;
+        }
+        .member-head .m-name { font-size: 14px; font-weight: 700; }
+        .member-head .m-stats { margin-left: auto; font-size: 12px; color: #c7c9d9; }
+        .level-badge {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            padding: 3px 9px;
+            border-radius: 999px;
+            text-transform: uppercase;
+        }
+        .level-fresher { background: #e0f2fe; color: #0369a1; }
+        .level-junior  { background: #dcfce7; color: #15803d; }
+        .level-middle  { background: #fef9c3; color: #a16207; }
+        .level-senior  { background: #fee2e2; color: #b91c1c; }
+        .member-body { padding: 16px 20px 20px; }
+        .team-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 14px;
+            margin-bottom: 12px;
+            font-size: 12px;
+            color: #374151;
+        }
+        .team-legend .lg-item {
+            display: inline-flex; align-items: center; gap: 5px;
+            cursor: pointer; user-select: none;
+            padding: 2px 6px; border-radius: 6px;
+            transition: opacity .15s, background .15s;
+        }
+        .team-legend .lg-item:hover { background: #f1f3f5; }
+        .team-legend .lg-item.lg-off { opacity: 0.4; text-decoration: line-through; }
+        .team-legend .lg-dot { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+        .member-chart-wrap { position: relative; height: 300px; }
+        .member-chart-wrap canvas { width: 100% !important; height: 100% !important; }
     </style>
 </head>
 <body>
@@ -501,6 +554,10 @@
             <button class="tab-btn" data-tab="tab-results">Cost Report</button>
             <button class="tab-btn" data-tab="tab-projects">Project Analysis</button>
             <button class="tab-btn" data-tab="tab-userwise">User Wise</button>
+            <button class="tab-btn" data-tab="tab-team-ART">ART</button>
+            <button class="tab-btn" data-tab="tab-team-ANIM">ANIM</button>
+            <button class="tab-btn" data-tab="tab-team-FE">FE</button>
+            <button class="tab-btn" data-tab="tab-team-GD">GD</button>
         </div>
 
         <!-- Load Data Tab -->
@@ -710,6 +767,12 @@
                 <div id="userWiseTableWrap" class="table-wrap table-scroll"></div>
             </div>
         </div>
+
+        <!-- Team Tabs -->
+        <div id="tab-team-ART"  class="tab-content team-tab" data-role="ART"  style="max-width:1200px;margin:0 auto;padding:0 32px 32px"></div>
+        <div id="tab-team-ANIM" class="tab-content team-tab" data-role="ANIM" style="max-width:1200px;margin:0 auto;padding:0 32px 32px"></div>
+        <div id="tab-team-FE"   class="tab-content team-tab" data-role="FE"   style="max-width:1200px;margin:0 auto;padding:0 32px 32px"></div>
+        <div id="tab-team-GD"   class="tab-content team-tab" data-role="GD"   style="max-width:1200px;margin:0 auto;padding:0 32px 32px"></div>
     </div>
 
     <script src="./src/index.js" type="module"></script>

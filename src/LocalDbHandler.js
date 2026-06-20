@@ -83,7 +83,11 @@ class LocalDbHandler {
 
         const date        = new Date().toISOString().slice(0, 10);
         const studioLabel = document.getElementById('studioSelect').selectedOptions[0]?.text || this._studio;
-        const reportRange = _computeReportRange(payload.overview);
+        // Prefer the real first/last log-work date from the daywise sheet;
+        // fall back to the sprint-derived range for older data.
+        const reportRange = payload.logRange
+            ? `${payload.logRange.start} → ${payload.logRange.end}`
+            : _computeReportRange(payload.overview);
 
         // Upsert: one record per studio + date
         const existing = await db.reports

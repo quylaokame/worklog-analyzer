@@ -16,6 +16,9 @@ class XlsxHandler {
     constructor() {
         this.flatGroupable   = null;
         this.flatIssueDaywise = null;
+        // First / last actual log-work date, derived from the
+        // "Grouped - (User daywise)" sheet → { start, end } as dd/mm/yyyy strings.
+        this.logRange = null;
         this._listenEvents();
     }
 
@@ -57,6 +60,10 @@ class XlsxHandler {
             // Row 0 = week labels, row 1 = day sub-labels; skip both via defval
             this.flatIssueDaywise = XLSX.utils.sheet_to_json(issueDaywiseSheet, { defval: 0 });
         }
+
+        // Derive the real first/last log-work date from the daywise grid so the
+        // report range is correct regardless of the file name.
+        this.logRange = this._computeLogRange(wb);
 
         const count = this.flatGroupable?.length ?? 0;
         this._setStatus("xlsx", `${count} records loaded`);
@@ -352,6 +359,68 @@ class XlsxHandler {
 
         // Signal that project data is ready (LocalDbHandler listens to auto-save)
         document.dispatchEvent(new Event('reportReady'));
+    }
+
+    /**
+     * Extract the first & last calendar day that has any logged hours from the
+     * "Grouped - (User daywise)" sheet. The sheet has two header rows:
+     *   row 0 → week-group labels (e.g. "APR 2026, 5 to 11 (W-15)")
+     *   row 1 → per-day labels (e.g. "1WE", "2TH" …)
+     * Dates are reconstructed via day-number rollover, so they're correct even
+     * when only some week groups carry a month label.
+     * Returns { start, end } as dd/mm/yyyy strings, or null.
+     */
+    _computeLogRange(wb) {
+        const sheet = wb.Sheets['Grouped - (User daywise)'];
+        if (!sheet) return null;
+
+        const arr = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false });
+        if (arr.length < 3) return null;
+
+        const [h1, h2] = arr;
+        const MON = { JAN:0, FEB:1, MAR:2, APR:3, MAY:4, JUN:5,
+                      JUL:6, AUG:7, SEP:8, OCT:9, NOV:10, DEC:11 };
+
+        // Starting month/year = first "MON YYYY" token in the week-group row
+        let month = null, year = null;
+        for (const c of h1) {
+            if (c == null) continue;
+            const m = String(c).match(/([A-Za-z]{3})\D*(\d{4})/);
+            if (m) { month = MON[m[1].toUpperCase()]; year = +m[2]; break; }
+        }
+        if (month == null) return null;
+
+        // Day columns + reconstructed date per column
+        const dayCols = [];
+        h2.forEach((v, c) => {
+            const m = v != null && String(v).match(/^(\d+)[A-Za-z]{2}$/);
+            if (m) dayCols.push({ col: c, day: +m[1] });
+        });
+        if (!dayCols.length) return null;
+
+        let prev = null;
+        dayCols.forEach(dc => {
+            if (prev != null && dc.day < prev) { month++; if (month > 11) { month = 0; year++; } }
+            dc.date = new Date(year, month, dc.day);
+            prev = dc.day;
+        });
+
+        // Scan data rows (skip the two header rows) for any numeric hours > 0
+        let min = null, max = null;
+        for (let r = 2; r < arr.length; r++) {
+            const row = arr[r];
+            if (!row) continue;
+            dayCols.forEach(dc => {
+                const v = row[dc.col];
+                if (typeof v === 'number' && v > 0) {
+                    if (!min || dc.date < min) min = dc.date;
+                    if (!max || dc.date > max) max = dc.date;
+                }
+            });
+        }
+        if (!min || !max) return null;
+
+        return { start: fmtDate(min), end: fmtDate(max) };
     }
 
     _exportProjectsCSV() {

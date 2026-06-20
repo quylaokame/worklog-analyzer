@@ -106,17 +106,21 @@ class FirebaseHandler {
     async _loadDateList() {
         if (!this.dbUrl || !this._studio) return;
         try {
-            const resp = await fetch(`${this.dbUrl}/worklog/${this._studio}.json?shallow=true`);
+            const resp = await fetch(`${this.dbUrl}/meta/${this._studio}.json`);
             const data = resp.ok ? await resp.json() : null;
-            const dates = data ? Object.keys(data).sort().reverse() : [];
+
+            // Newest first (savedAt is ISO, falls back to the key)
+            const entries = data ? Object.entries(data) : [];
+            entries.sort((a, b) =>
+                (b[1].savedAt || b[0]).localeCompare(a[1].savedAt || a[0]));
 
             const sel = document.getElementById('firebaseDateSelect');
-            sel.innerHTML = dates.length
-                ? dates.map(d => `<option value="${d}">${d}</option>`).join('')
+            sel.innerHTML = entries.length
+                ? entries.map(([key, m]) => `<option value="${key}">${this._buildLabel(m)}</option>`).join('')
                 : '<option value="">No reports saved yet</option>';
 
             document.getElementById('firebaseLoadSection').style.display =
-                dates.length ? 'flex' : 'none';
+                entries.length ? 'flex' : 'none';
         } catch (e) {
             console.warn('Firebase list error:', e);
         }
@@ -135,17 +139,31 @@ class FirebaseHandler {
         btn.disabled = true; btn.textContent = 'Saving…';
 
         try {
-            const date = new Date().toISOString().slice(0, 10);
-            const resp = await fetch(
-                `${this.dbUrl}/worklog/${this._studio}/${date}.json`,
-                {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                }
-            );
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            this._setStatus(`Saved: ${date}`);
+            // Unique, Firebase-safe key per save (':' and '.' are forbidden in keys)
+            const key = payload.savedAt.replace(/[:.]/g, '-');
+            const studioLabel = document.getElementById('studioSelect').selectedOptions[0]?.text || this._studio;
+            const meta = {
+                studioLabel,
+                savedAt: payload.savedAt,
+                start:   payload.logRange?.start || '',
+                end:     payload.logRange?.end   || '',
+            };
+
+            // Store the full report and a lightweight meta entry (for the list).
+            const put = (path, body) => fetch(`${this.dbUrl}/${path}.json`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+
+            const [r1, r2] = await Promise.all([
+                put(`worklog/${this._studio}/${key}`, payload),
+                put(`meta/${this._studio}/${key}`, meta),
+            ]);
+            if (!r1.ok) throw new Error(`HTTP ${r1.status}`);
+            if (!r2.ok) throw new Error(`HTTP ${r2.status}`);
+
+            this._setStatus(`Saved: ${this._fmtSaved(meta.savedAt)}`);
             this._loadDateList();
         } catch (e) {
             alert(`Save failed: ${e.message}`);
@@ -155,26 +173,43 @@ class FirebaseHandler {
         }
     }
 
+    // ── Label helpers ────────────────────────────────────────────────────────
+
+    _fmtSaved(iso) {
+        const d = new Date(iso);
+        if (isNaN(d)) return iso || '';
+        const date = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+        const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+        return `${date} ${time}`;
+    }
+
+    /** "Studio · start → end · saved dd/mm/yyyy hh:mm" */
+    _buildLabel(m) {
+        const studio = m.studioLabel || this._studio;
+        const range  = (m.start || m.end) ? ` · ${m.start || '?'} → ${m.end || '?'}` : '';
+        return `${studio}${range} · saved ${this._fmtSaved(m.savedAt)}`;
+    }
+
     // ── Load ───────────────────────────────────────────────────────────────
 
     async _load() {
         if (!this.dbUrl || !this._studio) return;
-        const date = document.getElementById('firebaseDateSelect').value;
-        if (!date) return;
+        const key = document.getElementById('firebaseDateSelect').value;
+        if (!key) return;
 
         const btn = document.getElementById('firebaseLoadBtn');
         btn.disabled = true; btn.textContent = 'Loading…';
 
         try {
             const resp = await fetch(
-                `${this.dbUrl}/worklog/${this._studio}/${date}.json`
+                `${this.dbUrl}/worklog/${this._studio}/${key}.json`
             );
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const payload = await resp.json();
             if (!payload) throw new Error('Empty report');
 
             restoreFromPayload(payload);
-            this._setStatus(`Loaded: ${date}`);
+            this._setStatus(`Loaded: ${this._fmtSaved(payload.savedAt)}`);
         } catch (e) {
             alert(`Load failed: ${e.message}`);
             this._setStatus(`Load failed: ${e.message}`, false);
