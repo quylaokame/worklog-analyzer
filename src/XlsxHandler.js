@@ -123,7 +123,7 @@ class XlsxHandler {
         // Sprint date ranges (min/max Log Date per sprint)
         const sprintDates = {};
         rows.forEach(r => {
-            const sprint = r['Sprint'];
+            const sprint = this._normSprint(r['Sprint']);
             if (!sprint) return;
             const raw = r['Log Date & Time'];
             if (!raw) return;
@@ -143,10 +143,39 @@ class XlsxHandler {
 
     _sortSprints(sprints) {
         return [...sprints].sort((a, b) => {
-            const na = parseInt(a) ?? 999;
-            const nb = parseInt(b) ?? 999;
+            const na = Number.isNaN(parseInt(a)) ? 999 : parseInt(a);
+            const nb = Number.isNaN(parseInt(b)) ? 999 : parseInt(b);
             return na !== nb ? na - nb : a.localeCompare(b);
         });
+    }
+
+    /**
+     * Normalize a raw Jira sprint label into one of the 7 canonical phases.
+     * Jira data is messy: sprint cells get concatenated when a task belongs to
+     * two sprints (e.g. "1 - GD CREATION 7 - FINAL"), use synonyms
+     * ("FIX BUGS" = "BUG FIXING"), and carry wrong leading numbers
+     * ("7 - BUG FIXING", "8 - FINAL"). So we match by PHASE NAME, not number,
+     * and for concatenated values keep the FIRST phase that appears.
+     * Unrecognized labels (e.g. "KCS REVIEW", "KTRAIN SLOT ANIM") are kept as-is.
+     */
+    _normSprint(raw) {
+        if (raw == null || raw === '') return '';
+        const s = String(raw).toUpperCase();
+        const PHASES = [
+            ['1 - GD CREATION',   /GD\s*CREATION/],
+            ['2 - ART CREATION',  /ART\s*CREATION/],
+            ['3 - ANIM CREATION', /ANIM\s*CREATION/],
+            ['4 - DEVELOPMENT',   /DEVELOPMENT/],
+            ['5 - FINETUNE',      /FINE\s*TUNE|KCS\s*REVIEW/],
+            ['6 - BUG FIXING',    /BUG\s*FIXING|FIX\s*BUGS|BUG\s*FIX/],
+            ['7 - FINAL',         /FINAL/],
+        ];
+        let best = null, bestIdx = Infinity;
+        for (const [canon, re] of PHASES) {
+            const m = s.match(re);
+            if (m && m.index < bestIdx) { bestIdx = m.index; best = canon; }
+        }
+        return best || String(raw);
     }
 
     _fmtSprint(name) {
@@ -257,7 +286,7 @@ class XlsxHandler {
         const phases = {};
 
         rows.forEach(r => {
-            const sprint = r['Sprint'] || '(No Sprint)';
+            const sprint = this._normSprint(r['Sprint']) || '(No Sprint)';
             const raw = r['Log Date & Time'];
             if (!raw) return;
             const d = raw instanceof Date ? raw : new Date(raw);

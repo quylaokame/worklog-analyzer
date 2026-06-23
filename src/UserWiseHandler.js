@@ -164,7 +164,7 @@ class UserWiseHandler {
                 const taskId      = parent || ticket;
                 map[ticket] = {
                     project:     col.project(r),
-                    sprint:      col.sprint(r),
+                    sprint:      xlsxHandler._normSprint(col.sprint(r)),
                     taskId,
                     taskName:    summaryMap[taskId]  || taskId,
                     subTaskId:   parent ? ticket : '',

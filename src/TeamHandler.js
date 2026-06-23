@@ -155,7 +155,7 @@ class TeamHandler {
             const colors = this._boardColors(m.boards.map(b => b.board));
             const legend = m.boards.map(b =>
                 `<span class="lg-item" data-canvas="${canvasId}" data-board="${esc(b.board)}" title="Click to show/hide">
-                    <span class="lg-dot" style="background:${colors[b.board]}"></span>${b.board} (${b.total.toFixed(1)}h)
+                    <span class="lg-dot" style="background:${colors[b.board]}"></span>${b.board} (${(b.total / 8).toFixed(2)}d)
                 </span>`
             ).join('');
             const taskCount = m.boards.reduce((s, b) => s + b.tasks.length, 0);
@@ -163,7 +163,7 @@ class TeamHandler {
                 <div class="member-head">
                     <span class="m-name">${m.name}</span>
                     <span class="level-badge level-${m.level.toLowerCase()}">${m.level}</span>
-                    <span class="m-stats">${m.total.toFixed(1)} h · ${taskCount} task(s) · ${m.boards.length} board(s)</span>
+                    <span class="m-stats">${(m.total / 8).toFixed(2)} d · ${taskCount} task(s) · ${m.boards.length} board(s)</span>
                 </div>
                 <div class="member-body">
                     <div class="team-legend">${legend}</div>
@@ -201,7 +201,7 @@ class TeamHandler {
                     tooltip: {
                         callbacks: {
                             title: items => `[${state.boardOf[items[0].dataIndex]}] ${items[0].label}`,
-                            label: c => ` ${c.parsed.y.toFixed(1)} h`,
+                            label: c => ` ${c.parsed.y.toFixed(2)} d`,
                         },
                     },
                 },
@@ -214,7 +214,12 @@ class TeamHandler {
                             callback(v) { const s = this.getLabelForValue(v); return s.length > 18 ? s.slice(0, 17) + '…' : s; },
                         },
                     },
-                    y: { beginAtZero: true, grid: { color: '#f0f2f5' }, ticks: { font: { size: 11 } } },
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: '#f0f2f5' },
+                        ticks: { font: { size: 11 } },
+                        title: { display: true, text: 'Man-days', font: { size: 11 } },
+                    },
                 },
             },
         });
@@ -231,7 +236,7 @@ class TeamHandler {
             if (state.hidden.has(b.board)) return;
             b.tasks.forEach(t => {
                 labels.push(t.name);
-                data.push(+t.hours.toFixed(2));
+                data.push(+(t.hours / 8).toFixed(2));   // hours → man-days
                 bg.push(state.colors[b.board]);
                 state.boardOf.push(b.board);
             });
